@@ -24,12 +24,12 @@
     <parent>
         <groupId>org.apache.sshd</groupId>
         <artifactId>sshd</artifactId>
-        <version>0.12.0.redhat-001</version>
+        <version>0.12.0.redhat-002</version>
     </parent>
 
     <groupId>org.apache.sshd</groupId>
     <artifactId>sshd-core</artifactId>
-    <version>0.12.0.redhat-001</version>
+    <version>0.12.0.redhat-002</version>
     <name>Apache Mina SSHD :: Core</name>
     <packaging>jar</packaging>
     <inceptionYear>2008</inceptionYear>
