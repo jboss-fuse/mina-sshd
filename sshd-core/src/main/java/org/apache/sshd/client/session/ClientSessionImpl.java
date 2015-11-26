@@ -174,7 +174,18 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
         }
     }
 
-    private String nextServiceName() {
+    @Override
+    public void exceptionCaught(Throwable t) {
+        synchronized (lock) {
+            if (!authFuture.isDone()) {
+                authFuture.setException(t);
+            }
+        }
+
+        super.exceptionCaught(t);
+    }
+
+    protected String nextServiceName() {
         synchronized (lock) {
             return nextServiceFactory.getName();
         }
