@@ -162,13 +162,29 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
 
     @Override
     public void exceptionCaught(Throwable t) {
+        signalAuthFailure(authFuture, t);
+        super.exceptionCaught(t);
+    }
+
+    @Override
+    protected void preClose() {
+        signalAuthFailure(authFuture, new SshException("Session is being closed"));
+        super.preClose();
+    }
+
+    protected void signalAuthFailure(AuthFuture future, Throwable t) {
+        boolean signalled = false;
         synchronized (lock) {
-            if (!authFuture.isDone()) {
-                authFuture.setException(t);
+            if ((future != null) && (!future.isDone())) {
+                future.setException(t);
+                signalled = true;
             }
         }
 
-        super.exceptionCaught(t);
+        if (log.isDebugEnabled()) {
+            log.debug("signalAuthFailure({}) type={}, signalled={}, message=\"{}\"",
+                      new Object[] { this, t.getClass().getSimpleName(), signalled, t.getMessage() });
+        }
     }
 
     protected String nextServiceName() {
