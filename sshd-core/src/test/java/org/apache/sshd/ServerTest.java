@@ -138,7 +138,7 @@ public class ServerTest extends BaseTest {
         client.start();
         ClientSession s = client.connect("localhost", port).await().getSession();
         int res = s.waitFor(ClientSession.CLOSED, 10000);
-        assertEquals("Session should be closed", ClientSession.CLOSED | ClientSession.WAIT_AUTH, res);
+        assertEquals("Session should be closed", ClientSession.CLOSED, res);
     }
 
     @Test
