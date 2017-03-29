@@ -265,6 +265,7 @@
                         <configuration>
                             <excludes>
                                 <exclude>build.metadata</exclude>
+                                <exclude>settings.xml</exclude>
                                 <exclude>**/*.iml</exclude>
                                 <exclude>src/docs/**</exclude>
                                 <exclude>**/stty-output-*.txt</exclude>
