@@ -264,6 +264,7 @@
                         </goals>
                         <configuration>
                             <excludes>
+                                <exclude>build.metadata</exclude>
                                 <exclude>**/*.iml</exclude>
                                 <exclude>src/docs/**</exclude>
                                 <exclude>**/stty-output-*.txt</exclude>
