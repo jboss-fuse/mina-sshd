@@ -103,6 +103,12 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
         } else {
             nextServiceFactory = null;
         }
+
+        // sshd session has to be added quickly to io session if the remaining part of this constructor
+        // fails and org.apache.sshd.common.AbstractSessionIoHandler.exceptionCaught() is called where this
+        // session has to be found
+        attachSession(session, this);
+
         authFuture = new DefaultAuthFuture(lock);
         authFuture.setAuthed(false);
         sendClientIdentification();
@@ -170,19 +176,38 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
     private AuthFuture tryAuth(String user, UserAuth auth) throws IOException {
         this.username = user;
         synchronized (lock) {
+            if (authFuture.getException() != null) {
+                throw new IllegalStateException(authFuture.getException());
+            }
             return authFuture = getUserAuthService().auth(auth);
         }
     }
 
     @Override
     public void exceptionCaught(Throwable t) {
+        signalAuthFailure(t);
+        super.exceptionCaught(t);
+    }
+
+    protected void signalAuthFailure(Throwable t) {
+        boolean signalled = false;
         synchronized (lock) {
-            if (!authFuture.isDone()) {
+            if ((authFuture != null) && (!authFuture.isDone())) {
                 authFuture.setException(t);
+                signalled = true;
+            }
+            if ((authFuture != null && authFuture.isDone() && authFuture.getException() == null)) {
+                // replace authFuture for one that's not ready yet, to set the exception
+                authFuture = new DefaultAuthFuture(lock);
+                authFuture.setException(t);
+                signalled = true;
             }
         }
 
-        super.exceptionCaught(t);
+        if (log.isDebugEnabled()) {
+            log.debug("signalAuthFailure({}) type={}, signalled={}, message=\"{}\"",
+                      new Object[] { this, t.getClass().getSimpleName(), signalled, t.getMessage() });
+        }
     }
 
     protected String nextServiceName() {

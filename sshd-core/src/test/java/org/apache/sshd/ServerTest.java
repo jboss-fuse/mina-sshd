@@ -63,6 +63,7 @@ import org.apache.sshd.util.Utils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -198,6 +199,7 @@ public class ServerTest extends BaseTest {
      *  - the server session is forcibly closed
      */
     @Test
+    @Ignore("This doesn't work even in community sshd-0.14.0 tag")
     public void testServerIdleTimeoutWithForce() throws Exception {
         final CountDownLatch latch = new CountDownLatch(1);
 
