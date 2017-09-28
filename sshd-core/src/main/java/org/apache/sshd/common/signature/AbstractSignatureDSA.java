@@ -18,6 +18,13 @@
  */
 package org.apache.sshd.common.signature;
 
+import java.nio.charset.StandardCharsets;
+import java.security.SignatureException;
+
+import org.apache.sshd.common.KeyPairProvider;
+import org.apache.sshd.common.util.BufferUtils;
+import org.apache.sshd.common.util.Pair;
+import org.apache.sshd.common.util.io.der.DERWriter;
 
 /**
  * DSA <code>Signature</code>
@@ -25,6 +32,11 @@ package org.apache.sshd.common.signature;
  * @author <a href="mailto:dev@mina.apache.org">Apache MINA SSHD Project</a>
  */
 public abstract class AbstractSignatureDSA extends AbstractSignature {
+
+    public static final int DSA_SIGNATURE_LENGTH = 40;
+    // result must be 40 bytes, but length of r and s may not exceed 20 bytes
+    public static final int MAX_SIGNATURE_VALUE_LENGTH = DSA_SIGNATURE_LENGTH / 2;
+
     protected AbstractSignatureDSA(String algorithm) {
 	super(algorithm);
     }
@@ -63,29 +75,93 @@ public abstract class AbstractSignatureDSA extends AbstractSignature {
     }
 
     public boolean verify(byte[] sig) throws Exception {
-        sig = extractSig(sig);
+        int sigLen = sig == null ? 0 : sig.length;
+        byte[] data = sig;
 
-        // ASN.1
-        int frst = ((sig[0] & 0x80) != 0 ? 1 : 0);
-        int scnd = ((sig[20] & 0x80) != 0 ? 1 : 0);
+        if (sigLen != DSA_SIGNATURE_LENGTH) {
+            // probably some encoded data
+            Pair<String, byte[]> encoding = extractEncodedSignature(sig);
+            if (encoding != null) {
+                String keyType = encoding.getFirst();
+                if (!KeyPairProvider.SSH_DSS.equals(keyType)) {
+                    throw new IllegalArgumentException(String.format("Mismatched key type: %s", keyType));
+                }
+                data = encoding.getSecond();
+                sigLen = data == null ? 0 : data.length;
+            }
+        }
 
-        int length = sig.length + 6 + frst + scnd;
-        byte[] tmp = new byte[length];
-        tmp[0] = (byte) 0x30;
-        tmp[1] = (byte) 0x2c;
-        tmp[1] += frst;
-        tmp[1] += scnd;
-        tmp[2] = (byte) 0x02;
-        tmp[3] = (byte) 0x14;
-        tmp[3] += frst;
-        System.arraycopy(sig, 0, tmp, 4 + frst, 20);
-        tmp[4 + tmp[3]] = (byte) 0x02;
-        tmp[5 + tmp[3]] = (byte) 0x14;
-        tmp[5 + tmp[3]] += scnd;
-        System.arraycopy(sig, 20, tmp, 6 + tmp[3] + scnd, 20);
-        sig = tmp;
+        if (sigLen != DSA_SIGNATURE_LENGTH) {
+            throw new SignatureException("Bad signature length (" + sigLen + " instead of " + DSA_SIGNATURE_LENGTH + ")"
+                    + " for " + BufferUtils.toHex(':', data));
+        }
 
-        return signature.verify(sig);
+        byte[] rEncoding;
+        try (DERWriter w = new DERWriter(MAX_SIGNATURE_VALUE_LENGTH + 4)) {     // in case length > 0x7F
+            w.writeBigInteger(data, 0, MAX_SIGNATURE_VALUE_LENGTH);
+            rEncoding = w.toByteArray();
+        }
+
+        byte[] sEncoding;
+        try (DERWriter w = new DERWriter(MAX_SIGNATURE_VALUE_LENGTH + 4)) {     // in case length > 0x7F
+            w.writeBigInteger(data, MAX_SIGNATURE_VALUE_LENGTH, MAX_SIGNATURE_VALUE_LENGTH);
+            sEncoding = w.toByteArray();
+        }
+
+        int length = rEncoding.length + sEncoding.length;
+        byte[] encoded;
+        try (DERWriter w = new DERWriter(1 + length + 4)) {  // in case length > 0x7F
+            w.write(0x30); // SEQUENCE
+            w.writeLength(length);
+            w.write(rEncoding);
+            w.write(sEncoding);
+            encoded = w.toByteArray();
+        }
+
+        return signature.verify(encoded);
+    }
+
+    private static final int BYTES = (Integer.SIZE / Byte.SIZE);
+
+    /**
+     * Makes an attempt to detect if the signature is encoded or pure data
+     *
+     * @param sig The original signature
+     * @return A {@link Pair} where first value is the key type and second
+     * value is the data - {@code null} if not encoded
+     */
+    protected Pair<String, byte[]> extractEncodedSignature(byte[] sig) {
+        final int dataLen = sig == null ? 0 : sig.length;
+
+        // if it is encoded then we must have at least 2 UINT32 values
+        if (dataLen < (2 * BYTES)) {
+            return null;
+        }
+
+        long keyTypeLen = BufferUtils.getUInt(sig, 0, dataLen);
+        // after the key type we MUST have data bytes
+        if (keyTypeLen >= (dataLen - BYTES)) {
+            return null;
+        }
+
+        int keyTypeStartPos = BYTES;
+        int keyTypeEndPos = keyTypeStartPos + (int) keyTypeLen;
+        int remainLen = dataLen - keyTypeEndPos;
+        // must have UINT32 with the data bytes length
+        if (remainLen < BYTES) {
+            return null;
+        }
+
+        long dataBytesLen = BufferUtils.getUInt(sig, keyTypeEndPos, remainLen);
+        // make sure reported number of bytes does not exceed available
+        if (dataBytesLen > (remainLen - BYTES)) {
+            return null;
+        }
+
+        String keyType = new String(sig, keyTypeStartPos, (int) keyTypeLen, StandardCharsets.UTF_8);
+        byte[] data = new byte[(int) dataBytesLen];
+        System.arraycopy(sig, keyTypeEndPos + BYTES, data, 0, (int) dataBytesLen);
+        return new Pair<>(keyType, data);
     }
 
 }
