@@ -29,7 +29,7 @@
 
     <groupId>org.apache.sshd</groupId>
     <artifactId>sshd</artifactId>
-    <version>0.14.0.redhat-002</version>
+    <version>0.14.0.redhat-003</version>
     <name>Apache Mina SSHD</name>
     <packaging>pom</packaging>
     <inceptionYear>2008</inceptionYear>
